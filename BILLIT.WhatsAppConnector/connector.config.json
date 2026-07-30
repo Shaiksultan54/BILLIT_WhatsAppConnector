@@ -1,0 +1,4 @@
+{
+  "HubUrl": "https://api.billit.app/hubs/whatsapp-connector",
+  "ConnectorToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtYXN0ZXJfc2hvcF9pZCI6IjMiLCJ0b2tlbl91c2UiOiJ3aGF0c2FwcC1jb25uZWN0b3IiLCJqdGkiOiJkMDU2YzkzNTMxODI0NDRiOGRjYjFhOWYwNmFlNmQ5MSIsImV4cCI6MTk0MzE2MTg4MCwiaXNzIjoiQklMTElUQVBJIiwiYXVkIjoiQklMTElUQ2xpZW50In0.4vJhsQFQLM7wzcJFaF_FA5ls5Q886tWcFbw-vBwdX08"
+}
