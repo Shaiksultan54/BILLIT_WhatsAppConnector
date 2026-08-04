@@ -42,6 +42,17 @@ namespace BILLIT.WhatsAppConnector
                 .WithUrl(_config.HubUrl, options =>
                 {
                     options.AccessTokenProvider = () => Task.FromResult<string?>(_config.ConnectorToken);
+                    // Bypass SSL certificate validation for local development
+                    // (the API uses a self-signed dev certificate on localhost)
+                    options.HttpMessageHandlerFactory = handler =>
+                    {
+                        if (handler is HttpClientHandler clientHandler)
+                        {
+                            clientHandler.ServerCertificateCustomValidationCallback =
+                                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                        }
+                        return handler;
+                    };
                 })
                 .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1) })
                 .Build();
