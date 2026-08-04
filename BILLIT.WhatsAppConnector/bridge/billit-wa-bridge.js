@@ -5,8 +5,11 @@ const pino = require('pino');
 
 // Parse --session-dir argument
 const args = process.argv.slice(2);
+let sessionDir = './session';
 const sessionDirArg = args.find(a => a.startsWith('--session-dir='));
-const sessionDir = sessionDirArg ? sessionDirArg.split('=')[1] : './session';
+if (sessionDirArg) {
+    sessionDir = sessionDirArg.slice('--session-dir='.length).replace(/^"|"$/g, '');
+}
 
 let sock;
 let isStarted = false;
@@ -144,6 +147,11 @@ rl.on('line', async (line) => {
     } catch (err) {
         sendJson({ event: 'error', message: `Failed to process command: ${err.message}` });
     }
+});
+
+// Exit gracefully when parent process closes stdin
+rl.on('close', () => {
+    process.exit(0);
 });
 
 // Start immediately if you prefer, or wait for 'start' command from C#
