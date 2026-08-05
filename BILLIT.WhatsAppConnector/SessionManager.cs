@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -32,6 +32,12 @@ namespace BILLIT.WhatsAppConnector
         private Process? _bridgeProcess;
         private readonly SemaphoreSlim _processLock = new SemaphoreSlim(1, 1);
 
+        // Auto-restart rate limiter: max 3 restarts within a 10-minute window.
+        // Prevents infinite restart loops when the session is permanently broken.
+        private const int MaxAutoRestartsInWindow = 3;
+        private static readonly TimeSpan AutoRestartWindow = TimeSpan.FromMinutes(10);
+        private readonly Queue<DateTime> _autoRestartTimestamps = new();
+
         // Runtime cache of last known state so a hub reconnect can re-affirm
         // status without needing to ask the bridge again.
         public string LastStatus { get; private set; } = "Disconnected";
@@ -50,6 +56,18 @@ namespace BILLIT.WhatsAppConnector
                 ?? Path.Combine(AppContext.BaseDirectory, "bridge", "billit-wa-bridge.js");
 
             Directory.CreateDirectory(_sessionDir);
+        }
+
+        /// <summary>
+        /// Checks whether existing Baileys session files are present on disk.
+        /// If they exist, the bridge can reuse the saved auth state without
+        /// prompting for a new QR code.
+        /// </summary>
+        private bool HasExistingSessionFiles()
+        {
+            if (!Directory.Exists(_sessionDir)) return false;
+            // Baileys useMultiFileAuthState stores creds.json as the primary auth file.
+            return File.Exists(Path.Combine(_sessionDir, "creds.json"));
         }
 
         /// <summary>Ensures the bridge process is running. Safe to call repeatedly.</summary>
@@ -94,6 +112,14 @@ namespace BILLIT.WhatsAppConnector
                 _bridgeProcess.Start();
                 _bridgeProcess.BeginOutputReadLine();
                 _bridgeProcess.BeginErrorReadLine();
+
+                // Always send 'start' — if session files exist, Baileys will
+                // auto-authenticate using the cached creds (no new QR shown).
+                // If no session files exist, Baileys will generate a fresh QR.
+                if (HasExistingSessionFiles())
+                {
+                    _logger.LogInformation("Existing session files found — bridge will try to resume without a new QR.");
+                }
 
                 await SendToBridgeAsync(new { cmd = "start" });
             }
@@ -244,6 +270,8 @@ namespace BILLIT.WhatsAppConnector
                         LastStatus = "Connected";
                         LastConnectedNumber = doc.RootElement.GetProperty("number").GetString();
                         LastQrCodeBase64 = null;
+                        // Reset auto-restart counter on successful connection.
+                        _autoRestartTimestamps.Clear();
                         if (conn != null) await conn.InvokeAsync("ReportConnected", LastConnectedNumber);
                         break;
 
@@ -257,8 +285,35 @@ namespace BILLIT.WhatsAppConnector
                         LastStatus = "Expired";
                         if (conn != null) await conn.InvokeAsync("ReportExpired");
 
-                        _logger.LogInformation("Session expired. Automatically restarting to generate a new QR code.");
-                        _ = StartSessionAsync();
+                        // Rate-limit auto-restarts to prevent infinite loops.
+                        // Purge timestamps older than the window.
+                        while (_autoRestartTimestamps.Count > 0 &&
+                               DateTime.UtcNow - _autoRestartTimestamps.Peek() > AutoRestartWindow)
+                        {
+                            _autoRestartTimestamps.Dequeue();
+                        }
+
+                        if (_autoRestartTimestamps.Count >= MaxAutoRestartsInWindow)
+                        {
+                            _logger.LogWarning(
+                                "Session expired {Count} times in the last {Window} minutes. " +
+                                "Stopping auto-restart — the shop owner must manually reconnect from the BILLIT UI.",
+                                _autoRestartTimestamps.Count, AutoRestartWindow.TotalMinutes);
+                            // Report a permanent error so the dashboard shows a clear message.
+                            if (conn != null)
+                            {
+                                try { await conn.InvokeAsync("ReportDisconnected",
+                                    "Session failed repeatedly. Please open BILLIT settings and click Reconnect."); } catch { }
+                            }
+                        }
+                        else
+                        {
+                            _autoRestartTimestamps.Enqueue(DateTime.UtcNow);
+                            _logger.LogInformation(
+                                "Session expired. Auto-restart attempt {Attempt}/{Max}.",
+                                _autoRestartTimestamps.Count, MaxAutoRestartsInWindow);
+                            _ = StartSessionAsync();
+                        }
                         break;
 
                     case "send-result":

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const readline = require('readline');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 
 // Parse --session-dir argument
@@ -13,6 +13,7 @@ if (sessionDirArg) {
 
 let sock;
 let isStarted = false;
+let reconnectAttempts = 0;
 
 // We use pino logger but set level to silent so it doesn't corrupt stdout JSON
 const logger = pino({ level: 'silent' });
@@ -28,8 +29,10 @@ async function startSession() {
 
     try {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        const { version, isLatest } = await fetchLatestBaileysVersion();
 
         sock = makeWASocket({
+            version,
             auth: state,
             printQRInTerminal: false,
             logger: logger,
@@ -56,16 +59,25 @@ async function startSession() {
             }
 
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                sendJson({ event: 'error', message: `Baileys connection closed. Reason: ${lastDisconnect?.error?.message} (Status Code: ${statusCode})` });
+                
+                const shouldReconnect = (statusCode !== DisconnectReason.loggedOut);
                 if (shouldReconnect) {
-                    sendJson({ event: 'disconnected', reason: 'reconnecting' });
-                    // Restart connection after 2 seconds
+                    reconnectAttempts++;
+                    if (reconnectAttempts > 5) {
+                        sendJson({ event: 'expired' });
+                        return;
+                    }
+                    sendJson({ event: 'disconnected', reason: `reconnecting (${reconnectAttempts}/5)` });
+                    // Restart connection after incremental backoff
                     isStarted = false;
-                    setTimeout(startSession, 2000);
+                    setTimeout(startSession, 2000 * reconnectAttempts);
                 } else {
                     sendJson({ event: 'expired' });
                 }
             } else if (connection === 'open') {
+                reconnectAttempts = 0;
                 const number = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                 sendJson({ event: 'connected', number: '+' + number.split('@')[0] });
             }
@@ -129,6 +141,7 @@ rl.on('line', async (line) => {
         const payload = JSON.parse(line);
         switch (payload.cmd) {
             case 'start':
+                reconnectAttempts = 0;
                 startSession();
                 break;
             case 'send-text':

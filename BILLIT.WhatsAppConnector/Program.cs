@@ -3,16 +3,21 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 
-// First run: no config file yet — prompt interactively, save it, then exit
-// so the operator can install the service and start it fresh (a Windows
-// Service has no console to prompt through, so this step only ever runs
-// when someone double-clicks the exe directly during setup).
+// First run: no config file yet — prompt for shop credentials, auto-pair
+// with the API, save the config, then continue to start the service.
+// (A Windows Service has no console to prompt through, so this step only
+// ever runs when someone double-clicks the exe directly during setup.)
 if (!ConnectorConfig.Exists())
 {
-    ConnectorConfig.RunInteractiveSetup();
-    Console.WriteLine("Press Enter to exit. Then install and start the Windows Service.");
-    Console.ReadLine();
-    return;
+    await ConnectorConfig.RunInteractiveSetupAsync();
+
+    if (!ConnectorConfig.Exists())
+    {
+        // Setup failed or was cancelled — don't start the service.
+        Console.WriteLine("Setup was not completed. Press Enter to exit.");
+        Console.ReadLine();
+        return;
+    }
 }
 
 var builder = WebApplication.CreateBuilder(args);
