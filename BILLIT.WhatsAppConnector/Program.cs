@@ -20,7 +20,13 @@ if (!ConnectorConfig.Exists())
     }
 }
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
+
+builder.Host.UseWindowsService();
 
 // Ensure it listens on a local port for direct printing
 builder.WebHost.UseUrls("http://localhost:5050");

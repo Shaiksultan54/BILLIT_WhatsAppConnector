@@ -8,7 +8,7 @@ namespace BILLIT.WhatsAppConnector
         public string HubUrl { get; set; } = string.Empty;
         public string ConnectorToken { get; set; } = string.Empty;
 
-        private static readonly string ConfigFilePath = "connector.config.json";
+        private static readonly string ConfigFilePath = Path.Combine(AppContext.BaseDirectory, "connector.config.json");
 
         public static bool Exists()
         {
