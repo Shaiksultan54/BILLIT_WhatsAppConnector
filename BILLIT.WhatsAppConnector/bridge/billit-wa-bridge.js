@@ -23,6 +23,14 @@ function sendJson(obj) {
     console.log(JSON.stringify(obj));
 }
 
+process.on('uncaughtException', (err) => {
+    sendJson({ event: 'error', message: 'UncaughtException: ' + (err ? err.message : 'unknown') });
+});
+
+process.on('unhandledRejection', (reason) => {
+    sendJson({ event: 'error', message: 'UnhandledRejection: ' + (reason ? (reason.message || reason) : 'unknown') });
+});
+
 async function startSession() {
     if (isStarted) return;
     isStarted = true;
