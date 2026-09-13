@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Drawing.Printing;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -18,7 +20,8 @@ namespace BILLIT.WhatsAppConnector.Services
             _config = config;
         }
 
-        public IReadOnlyList<string> GetInstalledPrinters()
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private IReadOnlyList<string> GetInstalledPrintersWindows()
         {
             var names = new List<string>();
             try
@@ -35,7 +38,17 @@ namespace BILLIT.WhatsAppConnector.Services
             return names;
         }
 
-        public string? GetDefaultPrinterName()
+        public IReadOnlyList<string> GetInstalledPrinters()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return new List<string>();
+            }
+            return GetInstalledPrintersWindows();
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private string? GetDefaultPrinterNameWindows()
         {
             try
             {
@@ -49,11 +62,21 @@ namespace BILLIT.WhatsAppConnector.Services
             }
         }
 
-        public IReadOnlyList<PrinterInfo> GetPrinterDetails()
+        public string? GetDefaultPrinterName()
         {
-            var defaultPrinter = GetDefaultPrinterName();
+            if (!OperatingSystem.IsWindows())
+            {
+                return null;
+            }
+            return GetDefaultPrinterNameWindows();
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private IReadOnlyList<PrinterInfo> GetPrinterDetailsWindows()
+        {
             var list = new List<PrinterInfo>();
-            foreach (var printer in GetInstalledPrinters())
+            var defaultPrinter = GetDefaultPrinterNameWindows();
+            foreach (var printer in GetInstalledPrintersWindows())
             {
                 bool isDefault = string.Equals(printer, defaultPrinter, StringComparison.OrdinalIgnoreCase);
                 bool isOnline = true;
@@ -71,8 +94,22 @@ namespace BILLIT.WhatsAppConnector.Services
             return list;
         }
 
+        public IReadOnlyList<PrinterInfo> GetPrinterDetails()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return new List<PrinterInfo>();
+            }
+            return GetPrinterDetailsWindows();
+        }
+
         public async Task<(bool Success, string? Error)> PrintPdfAsync(byte[] pdfBytes, string? printerName, int copies = 1, string? paperSize = "80mm")
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                return (false, "PDF Printing via SumatraPDF is currently only supported on Windows.");
+            }
+
             if (pdfBytes == null || pdfBytes.Length == 0)
             {
                 return (false, "Cannot print empty document bytes.");
@@ -197,6 +234,39 @@ namespace BILLIT.WhatsAppConnector.Services
 
         public Task<(bool Success, string? Error)> PrintRawAsync(byte[] rawBytes, string? printerName)
         {
+            // Cross Platform: Network Printing
+            if (!string.IsNullOrWhiteSpace(printerName) && IPAddress.TryParse(printerName, out _))
+            {
+                return Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        using var client = new TcpClient();
+                        await client.ConnectAsync(printerName, 9100, cts.Token);
+                        using var stream = client.GetStream();
+                        await stream.WriteAsync(rawBytes, 0, rawBytes.Length, cts.Token);
+                        _logger.LogInformation("Dispatched {Bytes} raw bytes over network to IP '{IP}'.", rawBytes.Length, printerName);
+                        return (true, (string?)null);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger.LogWarning("Network print timed out on IP '{IP}'", printerName);
+                        return (false, (string?)"Network print timed out.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Network print failed on IP '{IP}'", printerName);
+                        return (false, (string?)ex.Message);
+                    }
+                });
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                return Task.FromResult<(bool, string?)>((false, "Local printing via spooler is only supported on Windows. For cross-platform support, please provide the printer's IP address to print over the network."));
+            }
+
             var target = string.IsNullOrWhiteSpace(printerName) ? GetDefaultPrinterName() : printerName;
             if (string.IsNullOrWhiteSpace(target))
             {
@@ -208,7 +278,7 @@ namespace BILLIT.WhatsAppConnector.Services
                 bool success = RawPrinterHelper.SendBytesToPrinter(target, rawBytes);
                 if (success)
                 {
-                    _logger.LogInformation("Dispatched {Bytes} raw bytes to printer '{Printer}'.", rawBytes.Length, target);
+                    _logger.LogInformation("Dispatched {Bytes} raw bytes to Windows printer spooler '{Printer}'.", rawBytes.Length, target);
                     return Task.FromResult<(bool, string?)>((true, null));
                 }
                 return Task.FromResult<(bool, string?)>((false, "Printer spooler rejected the raw buffer. Check if printer is online and accepts RAW commands."));
@@ -320,6 +390,8 @@ namespace BILLIT.WhatsAppConnector.Services
 
             public static bool SendBytesToPrinter(string szPrinterName, byte[] bytes)
             {
+                if (!OperatingSystem.IsWindows()) return false;
+
                 var pUnmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
                 Marshal.Copy(bytes, 0, pUnmanagedBytes, bytes.Length);
 

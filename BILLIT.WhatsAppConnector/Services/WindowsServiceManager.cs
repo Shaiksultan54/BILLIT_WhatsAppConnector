@@ -10,6 +10,12 @@ namespace BILLIT.WhatsAppConnector.Services
 
         public static async Task HandleCommandAsync(string command)
         {
+            if (!OperatingSystem.IsWindows() && (command.StartsWith("--install") || command.StartsWith("--uninstall") || command.StartsWith("--start") || command.StartsWith("--stop") || command.StartsWith("--status")))
+            {
+                Console.WriteLine("Error: Windows Service management commands are only supported on Windows.");
+                return;
+            }
+
             var exePath = Process.GetCurrentProcess().MainModule?.FileName
                 ?? Path.Combine(AppContext.BaseDirectory, "BILLIT_WhatsAppConnector.exe");
 

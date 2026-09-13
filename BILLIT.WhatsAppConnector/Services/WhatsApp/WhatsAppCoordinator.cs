@@ -56,6 +56,12 @@ namespace BILLIT.WhatsAppConnector.Services.WhatsApp
 
         public async Task SwitchModeAsync(WhatsAppMode newMode)
         {
+            if (!OperatingSystem.IsWindows() && newMode != WhatsAppMode.Disabled)
+            {
+                _logger.LogWarning("WhatsApp integration is restricted to Windows OS only. Ignoring mode switch to {Mode}.", newMode);
+                return;
+            }
+
             await _lock.WaitAsync();
             try
             {
@@ -91,6 +97,12 @@ namespace BILLIT.WhatsAppConnector.Services.WhatsApp
 
         public async Task StartAsync()
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                _logger.LogWarning("Cannot start WhatsApp service: only supported on Windows.");
+                return;
+            }
+
             if (_currentService.Mode == WhatsAppMode.Disabled)
             {
                 // Auto-activate to LocalBridge (or CloudApi if configured)
