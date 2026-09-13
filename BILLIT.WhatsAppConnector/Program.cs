@@ -84,6 +84,40 @@ try
 
     builder.Services.AddCors(options =>
     {
+        options.AddPolicy("BillitOrigins", policy =>
+        {
+            policy.SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin)) return false;
+                try
+                {
+                    var uri = new Uri(origin);
+                    // Development: Angular UI at localhost:4200, local control panel at :5050, or any local loopback port
+                    if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                        uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    // Production: bistore.online, www.bistore.online, *.bistore.online
+                    if (uri.Host.Equals("bistore.online", StringComparison.OrdinalIgnoreCase) ||
+                        uri.Host.EndsWith(".bistore.online", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }
+                catch
+                {
+                    return false;
+                }
+            })
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+        });
+
         options.AddPolicy("AllowAll", policy => policy
             .AllowAnyOrigin()
             .AllowAnyMethod()
@@ -92,7 +126,7 @@ try
 
     var app = builder.Build();
 
-    app.UseCors("AllowAll");
+    app.UseCors("BillitOrigins");
 
     // ---------------- LOCAL CONTROL PANEL ----------------
     app.MapGet("/", () => Results.Content(DiagnosticsDashboard.HtmlContent, "text/html; charset=utf-8"));
@@ -115,6 +149,7 @@ try
             {
                 Mode = waStatus.Mode.ToString(),
                 State = waStatus.State,
+                IsDead = waStatus.Mode == WhatsAppMode.Disabled,
                 ConnectedNumber = waStatus.ConnectedNumber,
                 QrCodeBase64 = waStatus.QrCodeBase64,
                 ErrorMessage = waStatus.ErrorMessage
@@ -264,11 +299,19 @@ try
         return Results.Ok(new { Success = true, Message = "Cloud Hub settings saved. Connection will re-affirm automatically." });
     });
 
-    // ---------------- WHATSAPP ENDPOINTS ----------------
+    // ---------------- WHATSAPP ENDPOINTS (DEAD BY DEFAULT — ON DEMAND) ----------------
     app.MapGet("/api/whatsapp/status", async (IWhatsAppService wa) =>
     {
         var status = await wa.GetStatusAsync();
-        return Results.Ok(status);
+        return Results.Ok(new
+        {
+            Mode = status.Mode.ToString(),
+            State = status.State,
+            IsDead = status.Mode == WhatsAppMode.Disabled,
+            ConnectedNumber = status.ConnectedNumber,
+            QrCodeBase64 = status.QrCodeBase64,
+            ErrorMessage = status.ErrorMessage
+        });
     });
 
     app.MapPost("/api/whatsapp/config", async (WhatsAppConfigRequest req, WhatsAppCoordinator coordinator, ConnectorConfig cfg) =>
@@ -281,21 +324,65 @@ try
                 cfg.CloudApiAccessToken = req.CloudApiAccessToken;
 
             await coordinator.SwitchModeAsync(mode);
-            return Results.Ok(new { Success = true, Mode = mode.ToString() });
+            return Results.Ok(new { Success = true, Mode = mode.ToString(), IsDead = mode == WhatsAppMode.Disabled });
         }
         return Results.BadRequest(new { Success = false, Error = $"Invalid mode '{req.Mode}'. Allowed: Disabled, LocalBridge, CloudApi" });
     });
 
+    // Bring WhatsApp alive from dead state
     app.MapPost("/api/whatsapp/start", async (IWhatsAppService wa) =>
     {
         await wa.StartAsync();
-        return Results.Ok(new { Success = true, Message = "WhatsApp service starting" });
+        var status = await wa.GetStatusAsync();
+        return Results.Ok(new
+        {
+            Success = true,
+            Message = "WhatsApp service awakened and starting",
+            Mode = status.Mode.ToString(),
+            State = status.State,
+            IsDead = status.Mode == WhatsAppMode.Disabled
+        });
+    });
+
+    app.MapPost("/api/whatsapp/enable", async (IWhatsAppService wa) =>
+    {
+        await wa.StartAsync();
+        var status = await wa.GetStatusAsync();
+        return Results.Ok(new
+        {
+            Success = true,
+            Message = "WhatsApp service enabled and starting",
+            Mode = status.Mode.ToString(),
+            State = status.State,
+            IsDead = status.Mode == WhatsAppMode.Disabled
+        });
+    });
+
+    // Return WhatsApp to dead state (kills Node.js bridge process)
+    app.MapPost("/api/whatsapp/stop", async (IWhatsAppService wa) =>
+    {
+        await wa.DisconnectAsync();
+        return Results.Ok(new
+        {
+            Success = true,
+            Message = "WhatsApp service stopped and returned to dead state (Disabled)",
+            Mode = "Disabled",
+            State = "Disabled",
+            IsDead = true
+        });
     });
 
     app.MapPost("/api/whatsapp/disconnect", async (IWhatsAppService wa) =>
     {
         await wa.DisconnectAsync();
-        return Results.Ok(new { Success = true, Message = "WhatsApp service disconnected" });
+        return Results.Ok(new
+        {
+            Success = true,
+            Message = "WhatsApp service disconnected and returned to dead state",
+            Mode = "Disabled",
+            State = "Disabled",
+            IsDead = true
+        });
     });
 
     app.MapPost("/api/whatsapp/send", async (SendDirectMessageRequest req, IWhatsAppService wa) =>

@@ -89,9 +89,32 @@ namespace BILLIT.WhatsAppConnector.Services.WhatsApp
 
         public Task<WhatsAppStatus> GetStatusAsync() => _currentService.GetStatusAsync();
 
-        public Task StartAsync() => _currentService.StartAsync();
+        public async Task StartAsync()
+        {
+            if (_currentService.Mode == WhatsAppMode.Disabled)
+            {
+                // Auto-activate to LocalBridge (or CloudApi if configured)
+                var targetMode = !string.IsNullOrWhiteSpace(_config.CloudApiAccessToken) && !string.IsNullOrWhiteSpace(_config.CloudApiPhoneNumberId)
+                    ? WhatsAppMode.CloudApi
+                    : WhatsAppMode.LocalBridge;
 
-        public Task DisconnectAsync() => _currentService.DisconnectAsync();
+                _logger.LogInformation("Activating WhatsApp service from dead state to {Mode}...", targetMode);
+                await SwitchModeAsync(targetMode);
+                return;
+            }
+
+            await _currentService.StartAsync();
+        }
+
+        public async Task DisconnectAsync()
+        {
+            await _currentService.DisconnectAsync();
+            if (_currentService.Mode != WhatsAppMode.Disabled)
+            {
+                _logger.LogInformation("WhatsApp service deactivated. Returning to dead state (Disabled)...");
+                await SwitchModeAsync(WhatsAppMode.Disabled);
+            }
+        }
 
         public Task<(bool Success, string? MessageId, string? Error)> SendTextAsync(long messageLogId, string to, string message) =>
             _currentService.SendTextAsync(messageLogId, to, message);

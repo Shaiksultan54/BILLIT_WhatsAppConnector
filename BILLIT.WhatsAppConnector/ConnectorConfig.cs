@@ -9,7 +9,9 @@ namespace BILLIT.WhatsAppConnector
     public class ConnectorConfig
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public WhatsAppMode Mode { get; set; } = WhatsAppMode.LocalBridge;
+        public WhatsAppMode Mode { get; set; } = WhatsAppMode.Disabled;
+
+        public bool IsWhatsAppActive => Mode != WhatsAppMode.Disabled;
 
         public string HubUrl { get; set; } = string.Empty;
         public string ConnectorToken { get; set; } = string.Empty;

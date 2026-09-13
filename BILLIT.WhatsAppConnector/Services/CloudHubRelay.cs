@@ -240,30 +240,52 @@ namespace BILLIT.WhatsAppConnector.Services
 
             conn.On("StartSession", async () =>
             {
-                if (_config.Mode == WhatsAppMode.Disabled)
-                {
-                    _logger.LogInformation("Cloud commanded StartSession, but WhatsApp is Disabled on this device.");
-                    return;
-                }
-
                 try
                 {
-                    _logger.LogInformation("Cloud commanded StartSession");
+                    _logger.LogInformation("Cloud Hub commanded StartSession. Activating WhatsApp service...");
                     await _whatsAppService.StartAsync();
                 }
                 catch (Exception ex) { _logger.LogError(ex, "Error starting WhatsApp session"); }
             });
 
-            conn.On("Disconnect", async () =>
+            conn.On("EnableWhatsApp", async () =>
             {
-                if (_config.Mode == WhatsAppMode.Disabled) return;
-
                 try
                 {
-                    _logger.LogInformation("Cloud commanded Disconnect");
+                    _logger.LogInformation("Cloud Hub commanded EnableWhatsApp. Bringing WhatsApp alive...");
+                    await _whatsAppService.StartAsync();
+                }
+                catch (Exception ex) { _logger.LogError(ex, "Error enabling WhatsApp"); }
+            });
+
+            conn.On("Disconnect", async () =>
+            {
+                try
+                {
+                    _logger.LogInformation("Cloud Hub commanded Disconnect. Returning WhatsApp to dead state...");
                     await _whatsAppService.DisconnectAsync();
                 }
                 catch (Exception ex) { _logger.LogError(ex, "Error disconnecting WhatsApp session"); }
+            });
+
+            conn.On("StopSession", async () =>
+            {
+                try
+                {
+                    _logger.LogInformation("Cloud Hub commanded StopSession. Returning WhatsApp to dead state...");
+                    await _whatsAppService.DisconnectAsync();
+                }
+                catch (Exception ex) { _logger.LogError(ex, "Error stopping WhatsApp session"); }
+            });
+
+            conn.On("DisableWhatsApp", async () =>
+            {
+                try
+                {
+                    _logger.LogInformation("Cloud Hub commanded DisableWhatsApp. Returning WhatsApp to dead state...");
+                    await _whatsAppService.DisconnectAsync();
+                }
+                catch (Exception ex) { _logger.LogError(ex, "Error disabling WhatsApp"); }
             });
 
             conn.On<SendTextPayload>("SendText", async payload =>

@@ -408,8 +408,16 @@ namespace BILLIT.WhatsAppConnector.Services
                     <span class="data-value" id="val-hub-url">-</span>
                 </div>
                 <div class="data-row">
-                    <span class="data-label">Service Mode</span>
+                    <span class="data-label">Service Port</span>
                     <span class="data-value" id="val-service-mode">Port 5050 (Active)</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Allowed Client Frontends</span>
+                    <span class="data-value" style="font-size: 11px; color: var(--success);">Dev: http://localhost:4200 | Prod: https://bistore.online</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Printing Direct API</span>
+                    <span class="data-value" style="font-size: 11px; color: var(--primary);">POST http://localhost:5050/api/print</span>
                 </div>
 
                 <div id="log-container" style="display: none;">
@@ -454,18 +462,32 @@ namespace BILLIT.WhatsAppConnector.Services
 
                 const waPill = document.getElementById('wa-pill');
                 waPill.className = 'status-pill';
-                if (wa.state === 'Connected') {
+                const toggleBtn = document.getElementById('btn-wa-toggle');
+
+                if (wa.mode === 'Disabled' || wa.isDead) {
+                    waPill.classList.add('pill-disabled');
+                    waPill.innerText = 'DEAD / INACTIVE';
+                    toggleBtn.innerText = 'Awaken & Start WhatsApp';
+                    toggleBtn.className = 'btn-primary';
+                    toggleBtn.onclick = enableWhatsApp;
+                } else if (wa.state === 'Connected') {
                     waPill.classList.add('pill-connected');
-                    waPill.innerText = 'Connected';
+                    waPill.innerText = 'Connected (' + (wa.connectedNumber || 'Ready') + ')';
+                    toggleBtn.innerText = 'Kill / Stop WhatsApp (Dead)';
+                    toggleBtn.className = 'btn-secondary';
+                    toggleBtn.onclick = stopWhatsApp;
                 } else if (wa.state === 'PendingQr') {
                     waPill.classList.add('pill-pending');
-                    waPill.innerText = 'Scan QR';
-                } else if (wa.state === 'Disabled') {
-                    waPill.classList.add('pill-disabled');
-                    waPill.innerText = 'Disabled';
+                    waPill.innerText = 'Scan QR Code';
+                    toggleBtn.innerText = 'Kill / Stop WhatsApp (Dead)';
+                    toggleBtn.className = 'btn-secondary';
+                    toggleBtn.onclick = stopWhatsApp;
                 } else {
                     waPill.classList.add('pill-disconnected');
                     waPill.innerText = wa.state;
+                    toggleBtn.innerText = 'Kill / Stop WhatsApp (Dead)';
+                    toggleBtn.className = 'btn-secondary';
+                    toggleBtn.onclick = stopWhatsApp;
                 }
 
                 const qrContainer = document.getElementById('qr-container');
@@ -565,13 +587,27 @@ namespace BILLIT.WhatsAppConnector.Services
             }
         }
 
-        async function toggleWhatsApp() {
+        async function enableWhatsApp() {
+            showAlert('Awakening WhatsApp service from dead state...', 'alert-success');
             try {
-                await fetch('/api/whatsapp/start', { method: 'POST' });
-                showAlert('Connecting WhatsApp...', 'alert-success');
+                const res = await fetch('/api/whatsapp/start', { method: 'POST' });
+                const d = await res.json();
+                showAlert('✓ ' + (d.message || 'WhatsApp started'), 'alert-success');
                 await fetchStatus();
             } catch (err) {
-                showAlert('Error: ' + err.message, 'alert-error');
+                showAlert('Failed to start WhatsApp: ' + err.message, 'alert-error');
+            }
+        }
+
+        async function stopWhatsApp() {
+            showAlert('Terminating WhatsApp bridge and returning to dead state...', 'alert-success');
+            try {
+                const res = await fetch('/api/whatsapp/stop', { method: 'POST' });
+                const d = await res.json();
+                showAlert('✓ ' + (d.message || 'WhatsApp stopped'), 'alert-success');
+                await fetchStatus();
+            } catch (err) {
+                showAlert('Failed to stop WhatsApp: ' + err.message, 'alert-error');
             }
         }
 
