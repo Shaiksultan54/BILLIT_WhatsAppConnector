@@ -59,12 +59,15 @@ try
     });
 
     builder.Host.UseSerilog();
-    builder.Host.UseWindowsService();
 
-    builder.Services.AddWindowsService(options =>
+    if (OperatingSystem.IsWindows())
     {
-        options.ServiceName = WindowsServiceManager.DisplayName;
-    });
+        builder.Host.UseWindowsService();
+        builder.Services.AddWindowsService(options =>
+        {
+            options.ServiceName = WindowsServiceManager.DisplayName;
+        });
+    }
 
     // Configure Host Port
     builder.WebHost.UseUrls($"http://localhost:{config.Port}");
