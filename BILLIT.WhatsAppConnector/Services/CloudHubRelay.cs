@@ -80,6 +80,7 @@ namespace BILLIT.WhatsAppConnector.Services
                     .WithUrl(_config.HubUrl, options =>
                     {
                         options.AccessTokenProvider = () => Task.FromResult<string?>(_config.ConnectorToken);
+#if DEBUG
                         options.HttpMessageHandlerFactory = handler =>
                         {
                             if (handler is HttpClientHandler clientHandler)
@@ -89,6 +90,7 @@ namespace BILLIT.WhatsAppConnector.Services
                             }
                             return handler;
                         };
+#endif
                     })
                     .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1) })
                     .Build();

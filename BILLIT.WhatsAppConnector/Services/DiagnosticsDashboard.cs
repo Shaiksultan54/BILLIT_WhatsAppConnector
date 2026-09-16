@@ -413,7 +413,7 @@ namespace BILLIT.WhatsAppConnector.Services
                 </div>
                 <div class="data-row">
                     <span class="data-label">Allowed Client Frontends</span>
-                    <span class="data-value" style="font-size: 11px; color: var(--success);">Dev: http://localhost:4200 | Prod: https://bistore.online</span>
+                    <span class="data-value" style="font-size: 11px; color: var(--success);">Dev: localhost | Prod: bistore.online, *.mytechin.com</span>
                 </div>
                 <div class="data-row">
                     <span class="data-label">Printing Direct API</span>

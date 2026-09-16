@@ -1,5 +1,6 @@
 {
   "Mode": "Disabled",
+  // "HubUrl": "https://biservices.mytechin.com/hubs/whatsapp-connector",
   "HubUrl": "https://localhost:7237/hubs/whatsapp-connector",
-  "ConnectorToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtYXN0ZXJfc2hvcF9pZCI6IjMiLCJ0b2tlbl91c2UiOiJ3aGF0c2FwcC1jb25uZWN0b3IiLCJqdGkiOiI1MWYzMmUyYzVlMWM0Y2E2OTM0OWU5MWJkMmRjODNjYyIsImV4cCI6MTk0MzY5MDA3NywiaXNzIjoiQklMTElUQVBJIiwiYXVkIjoiQklMTElUQ2xpZW50In0.g4uMHD-faRBwy7UyyT6FrmUDeuiu74bp72d-d8XNU3c"
+  "ConnectorToken": ""
 }

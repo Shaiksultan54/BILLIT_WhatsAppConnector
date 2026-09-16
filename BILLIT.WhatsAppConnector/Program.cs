@@ -43,6 +43,18 @@ Log.Logger = new LoggerConfiguration()
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
+// 2b. Global Exception Handlers — Prevent Windows Service crashes from unobserved async exceptions
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    Log.Fatal(e.ExceptionObject as Exception, "Unhandled domain exception");
+};
+
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    Log.Error(e.Exception, "Unobserved task exception (swallowed to protect service stability)");
+    e.SetObserved();
+};
+
 try
 {
     Log.Information("Starting BILLIT Device Agent Host...");
@@ -75,7 +87,6 @@ try
     // DI Registrations
     builder.Services.AddSingleton(config);
     builder.Services.AddSingleton<IPrinterService, PrinterService>();
-    builder.Services.AddSingleton<PrinterManager>();
 
     builder.Services.AddSingleton<DisabledWhatsAppService>();
     builder.Services.AddSingleton<BaileysBridgeWhatsAppService>();
@@ -102,9 +113,15 @@ try
                         return true;
                     }
 
-                    // Production: bistore.online, www.bistore.online, *.bistore.online
+                    // Production: bistore.online, *.bistore.online, mytechin.com, *.mytechin.com
                     if (uri.Host.Equals("bistore.online", StringComparison.OrdinalIgnoreCase) ||
                         uri.Host.EndsWith(".bistore.online", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    if (uri.Host.Equals("mytechin.com", StringComparison.OrdinalIgnoreCase) ||
+                        uri.Host.EndsWith(".mytechin.com", StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
                     }

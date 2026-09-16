@@ -143,7 +143,7 @@ namespace BILLIT.WhatsAppConnector.Services.WhatsApp
             {
                 if (_bridgeProcess is { HasExited: false })
                 {
-                    try { await SendToBridgeAsync(new { cmd = "disconnect" }); } catch { }
+                    try { await SendToBridgeAsync(new { cmd = "end" }); } catch { }
 
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                     try

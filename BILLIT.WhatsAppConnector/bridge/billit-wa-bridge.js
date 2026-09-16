@@ -158,9 +158,20 @@ rl.on('line', async (line) => {
             case 'send-document':
                 await sendDocument(payload.messageLogId, payload.to, payload.caption, payload.fileBase64, payload.fileName);
                 break;
+            case 'end':
             case 'disconnect':
+                // Gracefully close connection while PRESERVING session credentials
+                // Next startup will auto-reconnect without needing a new QR scan
                 if (sock) {
-                    sock.logout();
+                    try { sock.end(); } catch (e) { /* ignore */ }
+                }
+                process.exit(0);
+                break;
+            case 'logout':
+                // Permanently destroy session — user must re-scan QR code
+                // Only use when explicitly unlinking the WhatsApp device
+                if (sock) {
+                    try { await sock.logout(); } catch (e) { /* ignore */ }
                 }
                 process.exit(0);
                 break;
